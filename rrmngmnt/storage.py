@@ -5,6 +5,7 @@ from rrmngmnt.service import Service
 logger = logging.getLogger(__name__)
 
 LV_CHANGE_CMD = 'lvchange -a %s %s/%s'
+DEFAULT_MNT_DIR = '/tmp/mnt_point'
 
 
 class NFSService(Service):
@@ -12,7 +13,7 @@ class NFSService(Service):
     Storage management class to maintain NFS services
     """
 
-    def mount(self, source, target=None, opts=None):
+    def mount(self, source, target=DEFAULT_MNT_DIR, opts=None):
         """
         Mounts source to target mount point
 
@@ -28,7 +29,6 @@ class NFSService(Service):
         :return: Path to mount point if succeeded, None otherwise
         :rtype: str
         """
-        target = '/tmp/mnt_point' if target is None else target
         cmd = ['mkdir', '-p', target]
         self.logger.info(
             "Creating directory %s to use as a mount point", target
@@ -53,7 +53,10 @@ class NFSService(Service):
             return None
         return target
 
-    def umount(self, mount_point, force=True, remove_mount_point=True):
+    def umount(
+            self, mount_point=DEFAULT_MNT_DIR, force=True,
+            remove_mount_point=True
+    ):
         """
         Performs an 'umount' on input 'mount_point' directory, and
         optionally removes 'mount_point'
@@ -87,6 +90,22 @@ class NFSService(Service):
                 self.logger.error("failed to remove directory %s", mount_point)
                 return False
         return True
+
+    def clean_mount_point(self, source):
+        """
+        Clean the directory of mount_point
+        __author__ = khakimi
+        :param source: Full path to source
+        :type source: str
+        :return: True if clean mount point succeeded, False otherwise
+        :rtype: bool
+        """
+        rm_cmd = ['rm', '-rf', DEFAULT_MNT_DIR + '/*']
+        return (
+            self.mount(source) and
+            self.host.run_command(rm_cmd)[0] == 0 and
+            self.umount()
+        )
 
 
 class LVMService(Service):
