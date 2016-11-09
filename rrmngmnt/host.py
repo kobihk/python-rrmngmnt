@@ -6,6 +6,7 @@ Service hosted on that Host.
 import copy
 import os
 import socket
+import time
 import threading
 import warnings
 
@@ -21,6 +22,8 @@ from rrmngmnt.package_manager import PackageManagerProxy
 from rrmngmnt.resource import Resource
 from rrmngmnt.service import Systemd, SysVinit, InitCtl
 from rrmngmnt.storage import NFSService, LVMService
+
+REBOOT_TIMEOUT = 360  # in seconds
 
 
 class Host(Resource):
@@ -490,3 +493,45 @@ class Host(Resource):
             "Use Host.executor().is_connective() instead."
         )
         return self.executor().is_connective(tcp_timeout=tcp_timeout)
+
+    def is_alive(self, timeout=10, sleep_time=1):
+        """
+        Check if host is alive by ping to it
+
+        :param timeout: number of seconds to check
+        :type timeout: int
+        :param sleep_time: sleep interval in seconds
+        :type sleep_time: int
+        :return: True if host is up, False otherwise
+        :rtype: bool
+        """
+        start_time = time.time()
+        while timeout > time.time() - start_time:
+            try:
+                if not self.run_command(["ping", "-c 1", self.ip])[0]:
+                    return True
+                time.sleep(sleep_time)
+            except Exception as exception:
+                self.logger.error(
+                    "The host %s is down!! %s", self.ip, exception
+                )
+        return False
+
+    def reboot(self, wait=True):
+        """
+        Reboot the host
+
+        :param wait: True to wait until host is up, False otherwise
+        :type wait: bool
+        :return: True if reboot succeeded, False otherwise
+        :rtype: bool
+        """
+        if self.is_alive():
+            if not self.run_command(["shutdown", "-r"])[0]:
+                if wait:
+                    # wait for system to go down
+                    while self.is_alive(timeout=REBOOT_TIMEOUT):
+                        time.sleep(2)
+                    return self.is_alive(timeout=REBOOT_TIMEOUT)
+                return True
+        return False
